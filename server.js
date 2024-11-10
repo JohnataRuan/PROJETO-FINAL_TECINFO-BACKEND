@@ -6,13 +6,10 @@ const morgan = require('morgan'); // Responsável por retornar algumas informaç
 const multer = require('./config/multer'); // Importar o multer configurado
 const cors = require('cors');
 const PORT = 3000;
-const { makeArrayWithCSV } = require('./csvUtils');
 const path = require('path');
-const csvParser = require('csv-parser'); // Biblioteca para parsear CSV diretamente no stream
 const readline = require('readline');
 const fs = require("fs");
 
-const PDFDocument = require('pdfkit');
 
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
@@ -99,7 +96,7 @@ app.post('/upload', multer.single('file'), async (req, res) => {
                 firstLine = false;
                 continue;
             }
-            const [matricula, nome] = line.split(';');
+            const [matricula, nome] = line.split(',');
             armazenaDados.push({
                 matricula: matricula.trim(),
                 nome: nome.trim(),
