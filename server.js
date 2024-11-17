@@ -5,6 +5,7 @@ const app = express();
 const morgan = require('morgan'); // Responsável por retornar algumas informações extras das requisições
 const multer = require('./config/multer'); // Importar o multer configurado
 const cors = require('cors');
+const bcrypt = require('bcrypt'); // Para criptografar a senha
 const PORT = 3000;
 const path = require('path');
 const readline = require('readline');
@@ -27,6 +28,7 @@ const {gerarMapaDeSala} = require('./utils/funcaoGerarPDF');
 const {gerarLocalizacaoAlunos} = require('./utils/funcaoGerarPDF');
 
 // Expecificações da conexão
+// Criação da conexão com o banco de dados
 const connection = mysql.createConnection({
     host: 'localhost',
     port: 3306,
@@ -35,13 +37,55 @@ const connection = mysql.createConnection({
     database: 'teste'
 });
 // Conexão com o banco de dados
-connection.connect((error) => {
-    if (error) {
-        console.log(`Erro ao conectar-se com o server: ${error.stack}`);
+connection.connect((err) => {
+    if (err) {
+        console.error('Erro ao conectar no banco de dados: ' + err.stack);
         return;
     }
-    console.log(`Conectado ao banco de dados com sucesso! ${connection.threadId}`);
+    console.log('Conectado ao banco de dados como id ' + connection.threadId);
 });
+                            // Parte do funcionamento do Login/Cadastro
+
+
+
+// Rota para cadastrar usuário
+app.post('/cadastrar', async (req, res) => {
+    const { nome, email, senha } = req.body;
+
+    // Validar se todos os campos foram preenchidos
+    if (!nome || !email || !senha) {
+        return res.status(400).json({ mensagem: 'Todos os campos são obrigatórios.' });
+    }
+
+    // Verificar se o email já existe
+    connection.query('SELECT * FROM usuarios WHERE email = ?', [email], async (err, results) => {
+        if (err) {
+            return res.status(500).json({ mensagem: 'Erro ao verificar o email.', erro: err });
+        }
+
+        if (results.length > 0) {
+            return res.status(400).json({ mensagem: 'Este email já está registrado.' });
+        }
+
+        // Criptografar a senha
+        const senhaHash = await bcrypt.hash(senha, 10); // '10' é o número de salt rounds
+
+        // Inserir usuário no banco de dados
+        connection.query('INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)', [nome, email, senhaHash], (err, result) => {
+            if (err) {
+                return res.status(500).json({ mensagem: 'Erro ao criar usuário.', erro: err });
+            }
+
+            res.status(201).json({ mensagem: 'Usuário cadastrado com sucesso!' });
+        });
+    });
+});
+
+
+                            // Parte do funcionamento dos Uploads/Sorteios/PDFS
+
+
+
 // Get para verificar todos alunos no banco de dados
 app.get('/alunos', (req, res) => {
     connection.query('SELECT * FROM alunos', (err, rows) => {
@@ -53,6 +97,8 @@ app.get('/alunos', (req, res) => {
         res.json(rows);
     });
 });
+
+
 //Get dos arquivos selecionados
 app.get('/salas', (req, res) => {
     connection.query('SELECT ensino ,serie, turma FROM alunos GROUP BY ensino,serie, turma', (err, rows) => {
@@ -70,6 +116,8 @@ app.get('/salas', (req, res) => {
         res.json(salas);
     });
 });
+
+
 //Post do upload da planilha
 app.post('/upload', multer.single('file'), async (req, res) => {
     try {
@@ -122,6 +170,8 @@ app.post('/upload', multer.single('file'), async (req, res) => {
     }
 });
 
+
+// Rota para gerar o sorteio dos alunos
 app.post('/sortearAlunos', async (req, res) => {
     console.log('Recebida requisição para /sortearAlunos');
     const salasSelecionadas = req.body.salasSelecionadas;
@@ -234,6 +284,7 @@ app.post('/gerarMapaDeSala', async (req, res) => {
 });
 
 
+// Rota para gerar o PDF de localização do local de provas
 app.post('/gerarLocalizacaoDeAlunos', async (req, res) => {
     const { arrayDeAlunos, nomeSala } = req.body; // Desestruturando os dados do corpo da requisição
 
