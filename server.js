@@ -5,17 +5,21 @@ const app = express();
 const morgan = require('morgan'); // Responsável por retornar algumas informações extras das requisições
 const multer = require('./config/multer'); // Importar o multer configurado
 const cors = require('cors');
-const bcrypt = require('bcrypt'); // Para criptografar a senha
 const PORT = 3000;
 const path = require('path');
 const readline = require('readline');
 const fs = require("fs");
 
 
+const bcrypt = require('bcrypt'); // Para criptografar a senha
+require('dotenv').config();
+const jwt = require('jsonwebtoken');
+
+
 app.use(cors());
-app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 app.use(bodyParser.json());
 
@@ -26,6 +30,7 @@ const {distribuirAlunosEmSalas} = require('./utils/funcaoSortear');
 const {gerarPDFAssinatura} = require('./utils/funcaoGerarPDF');
 const {gerarMapaDeSala} = require('./utils/funcaoGerarPDF');
 const {gerarLocalizacaoAlunos} = require('./utils/funcaoGerarPDF');
+const {authenticateToken} = require('./utils/validarToken');
 
 // Expecificações da conexão
 // Criação da conexão com o banco de dados
@@ -46,6 +51,37 @@ connection.connect((err) => {
 });
                             // Parte do funcionamento do Login/Cadastro
 
+
+
+// Rota de Login
+app.post('/login', (req, res) => {
+    const { email, senha } = req.body;
+
+    const query = 'SELECT * FROM usuarios WHERE email = ?';
+    connection.query(query, [email], async (err, resultados) => {
+        if (err) {
+            console.error('Erro ao consultar o banco de dados:', err.message);
+            return res.status(500).json({ mensagem: 'Erro no servidor' });
+        }
+
+        if (resultados.length === 0) {
+            return res.status(401).json({ mensagem: 'Usuário ou senha inválidos' });
+        }
+
+        const usuario = resultados[0];
+        const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
+        if (!senhaCorreta) {
+            return res.status(401).json({ mensagem: 'Usuário ou senha inválidos' });
+        }
+
+        // Cria o token JWT
+        const payload = { id: usuario.id, nome: usuario.nome };
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES });
+
+        // Envia o token e o nome do usuário para o frontend
+        res.json({ mensagem: 'Login bem-sucedido', token, nome: usuario.nome });
+    });
+});
 
 
 // Rota para cadastrar usuário
@@ -87,7 +123,7 @@ app.post('/cadastrar', async (req, res) => {
 
 
 // Get para verificar todos alunos no banco de dados
-app.get('/alunos', (req, res) => {
+app.get('/alunos',authenticateToken, (req, res) => {
     connection.query('SELECT * FROM alunos', (err, rows) => {
         if (err) {
             console.error('Erro ao executar a consulta:', err);
@@ -99,70 +135,92 @@ app.get('/alunos', (req, res) => {
 });
 
 
-//Get dos arquivos selecionados
-app.get('/salas', (req, res) => {
-    connection.query('SELECT ensino ,serie, turma FROM alunos GROUP BY ensino,serie, turma', (err, rows) => {
+app.get('/salas', authenticateToken, (req, res) => {
+    connection.query('SELECT ensino, serie, turma FROM alunos GROUP BY ensino, serie, turma', (err, rows) => {
         if (err) {
             console.error('Erro ao executar a consulta:', err);
             res.status(500).send('Erro interno do servidor');
             return;
         }
+
         const salas = rows.map(row => ({
             ensino: row.ensino,
             serie: row.serie,
             turma: row.turma,
         }));
 
+        // Adiciona o header Content-Type
+        res.setHeader('Content-Type', 'application/json');
         res.json(salas);
     });
 });
 
 
 //Post do upload da planilha
-app.post('/upload', multer.single('file'), async (req, res) => {
+app.post('/upload', authenticateToken, multer.single('file'), async (req, res) => {
     try {
+        // Verificando se o arquivo foi enviado
         if (!req.file) {
             return res.status(400).send('Arquivo não encontrado');
         }
 
+        // Obtendo os dados do corpo da requisição (ensino, série e turma)
         const { ensino, serie, turma } = req.body;
 
-        if (!ensino ||!turma || !serie) {
-            return res.status(400).send('Ensino Turma e Série são obrigatórios');
+        // Verificando se os campos obrigatórios foram preenchidos
+        if (!ensino || !turma || !serie) {
+            return res.status(400).send('Ensino, Turma e Série são obrigatórios');
         }
 
+        // Processando o arquivo CSV
         const fileStream = readline.createInterface({
-            input: require('stream').Readable.from([req.file.buffer.toString('utf-8')]),
+            input: require('stream').Readable.from([req.file.buffer]),
             crlfDelay: Infinity
         });
 
         const armazenaDados = [];
         let firstLine = true;
 
+        // Lendo cada linha do arquivo CSV
         for await (const line of fileStream) {
             if (firstLine) {
                 firstLine = false;
-                continue;
+                continue; // Ignorar a primeira linha (cabeçalho)
             }
+
             const [matricula, nome] = line.split(',');
+
+            if (!matricula || !nome) {
+                console.warn(`Linha inválida (ignorando): ${line}`);
+                continue; // Ignorar linhas mal formatadas
+            }
+
             armazenaDados.push({
                 matricula: matricula.trim(),
                 nome: nome.trim(),
             });
         }
 
-        armazenaDados.forEach((aluno) => {
-            const query = 'INSERT INTO alunos (matricula, nome, ensino, serie, turma) VALUES (?, ?, ?, ?, ?)';
-            const values = [aluno.matricula, aluno.nome, ensino, serie, turma];
+        // Inserindo os dados no banco de dados
+        const insertPromises = armazenaDados.map((aluno) => {
+            return new Promise((resolve, reject) => {
+                const query = 'INSERT INTO alunos (matricula, nome, ensino, serie, turma) VALUES (?, ?, ?, ?, ?)';
+                const values = [aluno.matricula, aluno.nome, ensino, serie, turma];
 
-            connection.query(query, values, (error) => {
-                if (error) {
-                    console.error('Erro ao inserir dados:', error);
-                    res.status(500).send('Erro ao inserir dados');
-                    return;
-                }
+                connection.query(query, values, (error) => {
+                    if (error) {
+                        console.error('Erro ao inserir dados:', error);
+                        reject('Erro ao inserir dados');
+                    } else {
+                        resolve();
+                    }
+                });
             });
         });
+
+        // Esperando todas as inserções no banco terminarem
+        await Promise.all(insertPromises);
+
         res.status(200).send('Dados inseridos com sucesso!');
     } catch (error) {
         console.error('Erro ao processar o CSV:', error);
@@ -172,7 +230,7 @@ app.post('/upload', multer.single('file'), async (req, res) => {
 
 
 // Rota para gerar o sorteio dos alunos
-app.post('/sortearAlunos', async (req, res) => {
+app.post('/sortearAlunos',authenticateToken, async (req, res) => {
     console.log('Recebida requisição para /sortearAlunos');
     const salasSelecionadas = req.body.salasSelecionadas;
     try {
@@ -205,7 +263,7 @@ app.post('/sortearAlunos', async (req, res) => {
 
 
 // Rota para leitura dos dados e geração do PDF
-app.post('/leituraPDF', async (req, res) => {
+app.post('/leituraPDF',authenticateToken, async (req, res) => {
     console.log('Recebida requisição para /leituraPDF');
     
     const armazenaDados = req.body.dadosNuvem;
@@ -248,7 +306,7 @@ app.post('/leituraPDF', async (req, res) => {
 
 
 // Rota para gerar o PDF do mapa de sala e enviar para download
-app.post('/gerarMapaDeSala', async (req, res) => {
+app.post('/gerarMapaDeSala',authenticateToken, async (req, res) => {
     console.log('Recebida requisição para /gerarMapaDeSala');
     const { alunos, nomeSala } = req.body;
 
@@ -285,7 +343,7 @@ app.post('/gerarMapaDeSala', async (req, res) => {
 
 
 // Rota para gerar o PDF de localização do local de provas
-app.post('/gerarLocalizacaoDeAlunos', async (req, res) => {
+app.post('/gerarLocalizacaoDeAlunos',authenticateToken, async (req, res) => {
     const { arrayDeAlunos, nomeSala } = req.body; // Desestruturando os dados do corpo da requisição
 
     try {
@@ -317,7 +375,7 @@ app.post('/gerarLocalizacaoDeAlunos', async (req, res) => {
 
 
 // Deletar todos alunos do banco de dados
-app.delete('/alunos', (req, res) => {
+app.delete('/alunos',authenticateToken, (req, res) => {
     connection.query('TRUNCATE TABLE alunos;',(error, result) => {
         if (error) {
             console.error('Erro ao deletar os alunos', error);
