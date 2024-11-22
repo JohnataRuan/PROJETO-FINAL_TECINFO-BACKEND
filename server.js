@@ -375,7 +375,7 @@ app.post('/gerarLocalizacaoDeAlunos',authenticateToken, async (req, res) => {
 
 
 // Deletar todos alunos do banco de dados
-app.delete('/alunos',authenticateToken, (req, res) => {
+app.delete('/deletaralunos',authenticateToken, (req, res) => {
     connection.query('TRUNCATE TABLE alunos;',(error, result) => {
         if (error) {
             console.error('Erro ao deletar os alunos', error);

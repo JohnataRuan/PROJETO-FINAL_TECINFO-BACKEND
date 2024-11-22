@@ -1,5 +1,3 @@
-
-
 // Função para embaralhar um array (método de Fisher-Yates)
 function embaralharArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -59,70 +57,55 @@ function distribuirAlunosEmSalas(salasSelecionadas) {
     // Distribui os alunos em cada sala
     for (let i = 0; i < quantidadeSalas; i++) {
         const sala = salasDistribuidas[i];
-        const serie = salasSelecionadas[i][0].serie;
-        const turma = salasSelecionadas[i][0].turma;
-        const salaProva = `${serie}${turma}`;
 
-        let alunosAlocados = 0;
-
-        for (let index = 0; index < numeroAlunosPorSala[i] && alunosAlocados < numeroAlunosPorSala[i]; index++) {
+        for (let index = 0; index < numeroAlunosPorSala[i]; index++) {
             if (indexAluno >= todosAlunos.length) break;
             const aluno = todosAlunos[indexAluno];
 
             // Tenta alocar o aluno em uma posição válida
-            if (podeAlocar(aluno, sala, index, cadeirasPorFila)) {
-                const fila = Math.floor(index / cadeirasPorFila) + 1;
-                const cadeira = (index % cadeirasPorFila) + 1;
-                sala[index] = { ...aluno, fila, cadeira, salaProva };
-                indexAluno++;
-                alunosAlocados++;
+            const posicaoValida = encontrarPosicaoValida(aluno, sala, cadeirasPorFila);
+            if (posicaoValida !== null) {
+                const fila = Math.floor(posicaoValida / cadeirasPorFila) + 1;
+                const cadeira = (posicaoValida % cadeirasPorFila) + 1;
+                sala[posicaoValida] = { ...aluno, fila, cadeira };
             } else {
-                // Se não for possível, adiciona aluno à lista de não alocados
+                // Se não for possível, adiciona o aluno à lista de não alocados
                 alunosNaoAlocados.push(aluno);
-                indexAluno++;
             }
+            indexAluno++;
         }
     }
 
-    // Realoca alunos não alocados, percorrendo todas as salas
+    // Realoca alunos não alocados, tentando novamente
     for (const aluno of alunosNaoAlocados) {
         let alocado = false;
 
         for (let i = 0; i < quantidadeSalas; i++) {
             const sala = salasDistribuidas[i];
-            const serie = salasSelecionadas[i][0].serie;
-            const turma = salasSelecionadas[i][0].turma;
-            const salaProva = `${serie}${turma}`;
-            
-            const posicaoAlternativa = encontrarPosicaoValida(aluno, sala, cadeirasPorFila);
 
-            if (posicaoAlternativa !== null) {
-                const fila = Math.floor(posicaoAlternativa / cadeirasPorFila) + 1;
-                const cadeira = (posicaoAlternativa % cadeirasPorFila) + 1;
-                sala[posicaoAlternativa] = { ...aluno, fila, cadeira, salaProva };
+            // Tenta encontrar outra posição válida
+            const posicaoValida = encontrarPosicaoValida(aluno, sala, cadeirasPorFila);
+            if (posicaoValida !== null) {
+                const fila = Math.floor(posicaoValida / cadeirasPorFila) + 1;
+                const cadeira = (posicaoValida % cadeirasPorFila) + 1;
+                sala[posicaoValida] = { ...aluno, fila, cadeira };
                 alocado = true;
                 break;
             }
         }
 
-        // Se não for possível alocar respeitando a regra, ignora restrição de proximidade como última solução
+        // Caso o aluno ainda não tenha sido alocado, ele será colocado na última cadeira disponível
         if (!alocado) {
             for (let i = 0; i < quantidadeSalas; i++) {
                 const sala = salasDistribuidas[i];
-                const serie = salasSelecionadas[i][0].serie;
-                const turma = salasSelecionadas[i][0].turma;
-                const salaProva = `${serie}${turma}`;
-                
-                for (let j = 0; j < sala.length; j++) {
-                    if (!sala[j]) {
-                        const fila = Math.floor(j / cadeirasPorFila) + 1;
-                        const cadeira = (j % cadeirasPorFila) + 1;
-                        sala[j] = { ...aluno, fila, cadeira, salaProva };
-                        alocado = true;
-                        break;
-                    }
+                const ultimaCadeira = sala.findIndex(cadeira => cadeira === null);
+
+                if (ultimaCadeira !== -1) {
+                    const fila = Math.floor(ultimaCadeira / cadeirasPorFila) + 1;
+                    const cadeira = (ultimaCadeira % cadeirasPorFila) + 1;
+                    sala[ultimaCadeira] = { ...aluno, fila, cadeira };
+                    break;
                 }
-                if (alocado) break;
             }
         }
     }
