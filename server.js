@@ -31,6 +31,13 @@ const {gerarPDFAssinatura} = require('./utils/funcaoGerarPDF');
 const {gerarMapaDeSala} = require('./utils/funcaoGerarPDF');
 const {gerarLocalizacaoAlunos} = require('./utils/funcaoGerarPDF');
 const {authenticateToken} = require('./utils/validarToken');
+const { processCSV } = require('./utils/functionsReq.js');
+const { insertStudents } = require('./utils/functionsReq.js');
+const { getStudentsBySeriesAndClass } = require('./utils/functionsReq.js');
+const { salvarPDFTemporario } = require('./utils/functionsReq.js');
+const { deletarPDFTemporario } = require('./utils/functionsReq.js');
+const { salvarPDFMapaDeSalaTemporario } = require('./utils/functionsReq.js');
+const { deletarPDFMapaDeSalaTemporario } = require('./utils/functionsReq.js');
 
 // Expecificações da conexão
 // Criação da conexão com o banco de dados
@@ -159,67 +166,19 @@ app.get('/salas', authenticateToken, (req, res) => {
 //Post do upload da planilha
 app.post('/upload', authenticateToken, multer.single('file'), async (req, res) => {
     try {
-        // Verificando se o arquivo foi enviado
         if (!req.file) {
             return res.status(400).send('Arquivo não encontrado');
         }
 
-        // Obtendo os dados do corpo da requisição (ensino, série e turma)
         const { ensino, serie, turma } = req.body;
 
-        // Verificando se os campos obrigatórios foram preenchidos
         if (!ensino || !turma || !serie) {
             return res.status(400).send('Ensino, Turma e Série são obrigatórios');
         }
 
-        // Processando o arquivo CSV
-        const fileStream = readline.createInterface({
-            input: require('stream').Readable.from([req.file.buffer]),
-            crlfDelay: Infinity
-        });
+        const armazenaDados = await processCSV(req.file.buffer);
 
-        const armazenaDados = [];
-        let firstLine = true;
-
-        // Lendo cada linha do arquivo CSV
-        for await (const line of fileStream) {
-            if (firstLine) {
-                firstLine = false;
-                continue; // Ignorar a primeira linha (cabeçalho)
-            }
-
-            const [matricula, nome] = line.split(',');
-
-            if (!matricula || !nome) {
-                console.warn(`Linha inválida (ignorando): ${line}`);
-                continue; // Ignorar linhas mal formatadas
-            }
-
-            armazenaDados.push({
-                matricula: matricula.trim(),
-                nome: nome.trim(),
-            });
-        }
-
-        // Inserindo os dados no banco de dados
-        const insertPromises = armazenaDados.map((aluno) => {
-            return new Promise((resolve, reject) => {
-                const query = 'INSERT INTO alunos (matricula, nome, ensino, serie, turma) VALUES (?, ?, ?, ?, ?)';
-                const values = [aluno.matricula, aluno.nome, ensino, serie, turma];
-
-                connection.query(query, values, (error) => {
-                    if (error) {
-                        console.error('Erro ao inserir dados:', error);
-                        reject('Erro ao inserir dados');
-                    } else {
-                        resolve();
-                    }
-                });
-            });
-        });
-
-        // Esperando todas as inserções no banco terminarem
-        await Promise.all(insertPromises);
+        await insertStudents(connection, armazenaDados, ensino, serie, turma);
 
         res.status(200).send('Dados inseridos com sucesso!');
     } catch (error) {
@@ -230,30 +189,22 @@ app.post('/upload', authenticateToken, multer.single('file'), async (req, res) =
 
 
 // Rota para gerar o sorteio dos alunos
-app.post('/sortearAlunos',authenticateToken, async (req, res) => {
+app.post('/sortearAlunos', authenticateToken, async (req, res) => {
     console.log('Recebida requisição para /sortearAlunos');
     const salasSelecionadas = req.body.salasSelecionadas;
+
     try {
-        const todasSalasSelecionadas = await Promise.all(
-            salasSelecionadas.map(sala => {
-                const query = 'SELECT * FROM alunos WHERE serie = ? AND turma = ?';
-                const values = [sala.serie, sala.turma];
-                return new Promise((resolve, reject) => {
-                    connection.query(query, values, (error, results) => {
-                        if (error) {
-                            reject(error);
-                        } else {
-                            resolve(results);
-                        }
-                    });
-                });
-            })
-        );
-        
+        // Buscar alunos no banco de dados
+        const todasSalasSelecionadas = await getStudentsBySeriesAndClass(connection, salasSelecionadas);
+
+        // Distribuir os alunos nas salas
         const resultadoDistribuicao = distribuirAlunosEmSalas(todasSalasSelecionadas);
 
-        res.send({  salasSelecionadas:todasSalasSelecionadas,
-                    salasSorteadas:resultadoDistribuicao});
+        // Retornar os resultados
+        res.send({
+            salasSelecionadas: todasSalasSelecionadas,
+            salasSorteadas: resultadoDistribuicao
+        });
 
     } catch (error) {
         console.error('Erro ao buscar dados:', error);
@@ -261,11 +212,10 @@ app.post('/sortearAlunos',authenticateToken, async (req, res) => {
     }
 });
 
-
 // Rota para leitura dos dados e geração do PDF
-app.post('/leituraPDF',authenticateToken, async (req, res) => {
+app.post('/leituraPDF', authenticateToken, async (req, res) => {
     console.log('Recebida requisição para /leituraPDF');
-    
+
     const armazenaDados = req.body.dadosNuvem;
     const nomeSala = req.body.nomeSala;
 
@@ -278,13 +228,8 @@ app.post('/leituraPDF',authenticateToken, async (req, res) => {
         // Gerar o PDF com os dados e o nome da sala
         const pdfData = await gerarPDFAssinatura(armazenaDados, nomeSala);
 
-        // Criar o caminho temporário do PDF
-        const pdfPath = path.join(__dirname, `ListDeAssinatura_${nomeSala}.pdf`);
-
-        // Escrever o PDF temporariamente
-        fs.writeFileSync(pdfPath, pdfData);
-
-        console.log('PDF gerado e armazenado temporariamente:', pdfPath);
+        // Salvar o PDF temporariamente
+        const pdfPath = await salvarPDFTemporario(pdfData, nomeSala);
 
         // Enviar o arquivo PDF como resposta
         res.sendFile(pdfPath, (err) => {
@@ -293,10 +238,7 @@ app.post('/leituraPDF',authenticateToken, async (req, res) => {
                 return res.status(500).send('Erro ao enviar o arquivo PDF.');
             }
             // Deletar o arquivo após enviar
-            fs.unlink(pdfPath, (err) => {
-                if (err) console.error('Erro ao deletar o arquivo temporário:', err);
-                else console.log('Arquivo PDF temporário deletado.');
-            });
+            deletarPDFTemporario(pdfPath);
         });
     } catch (error) {
         console.error('Erro durante a geração do PDF:', error);
@@ -306,7 +248,7 @@ app.post('/leituraPDF',authenticateToken, async (req, res) => {
 
 
 // Rota para gerar o PDF do mapa de sala e enviar para download
-app.post('/gerarMapaDeSala',authenticateToken, async (req, res) => {
+app.post('/gerarMapaDeSala', authenticateToken, async (req, res) => {
     console.log('Recebida requisição para /gerarMapaDeSala');
     const { alunos, nomeSala } = req.body;
 
@@ -314,9 +256,8 @@ app.post('/gerarMapaDeSala',authenticateToken, async (req, res) => {
         // Gera o PDF com os dados dos alunos e o nome da sala
         const pdfData = await gerarMapaDeSala(alunos, nomeSala);
 
-        // Define um caminho temporário para salvar o PDF
-        const tempPdfPath = path.join(__dirname, `tempMapaDeSala_${nomeSala}.pdf`);
-        fs.writeFileSync(tempPdfPath, pdfData);
+        // Salvar o PDF temporariamente
+        const tempPdfPath = await salvarPDFMapaDeSalaTemporario(pdfData, nomeSala);
 
         // Define os headers para envio do PDF como arquivo para download
         res.setHeader('Content-Type', 'application/pdf');
@@ -325,14 +266,11 @@ app.post('/gerarMapaDeSala',authenticateToken, async (req, res) => {
         // Envia o PDF diretamente na resposta
         res.sendFile(tempPdfPath, (err) => {
             // Após o envio, deleta o arquivo temporário
-            fs.unlink(tempPdfPath, (unlinkErr) => {
-                if (unlinkErr) console.error('Erro ao deletar o arquivo temporário:', unlinkErr);
-                else console.log('Arquivo PDF temporário deletado.');
-            });
+            deletarPDFMapaDeSalaTemporario(tempPdfPath);
 
             if (err) {
                 console.error('Erro ao enviar o PDF:', err);
-                res.status(500).send('Erro ao enviar o PDF');
+                return res.status(500).send('Erro ao enviar o PDF');
             }
         });
     } catch (error) {

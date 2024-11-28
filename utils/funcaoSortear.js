@@ -57,6 +57,7 @@ function distribuirAlunosEmSalas(salasSelecionadas) {
     // Distribui os alunos em cada sala
     for (let i = 0; i < quantidadeSalas; i++) {
         const sala = salasDistribuidas[i];
+        const salaProva = `${salasSelecionadas[i][0].serie}${salasSelecionadas[i][0].turma}`;
 
         for (let index = 0; index < numeroAlunosPorSala[i]; index++) {
             if (indexAluno >= todosAlunos.length) break;
@@ -67,7 +68,7 @@ function distribuirAlunosEmSalas(salasSelecionadas) {
             if (posicaoValida !== null) {
                 const fila = Math.floor(posicaoValida / cadeirasPorFila) + 1;
                 const cadeira = (posicaoValida % cadeirasPorFila) + 1;
-                sala[posicaoValida] = { ...aluno, fila, cadeira };
+                sala[posicaoValida] = { ...aluno, fila, cadeira, salaProva };
             } else {
                 // Se não for possível, adiciona o aluno à lista de não alocados
                 alunosNaoAlocados.push(aluno);
@@ -82,13 +83,14 @@ function distribuirAlunosEmSalas(salasSelecionadas) {
 
         for (let i = 0; i < quantidadeSalas; i++) {
             const sala = salasDistribuidas[i];
+            const salaProva = `${salasSelecionadas[i][0].serie}${salasSelecionadas[i][0].turma}`;
 
             // Tenta encontrar outra posição válida
             const posicaoValida = encontrarPosicaoValida(aluno, sala, cadeirasPorFila);
             if (posicaoValida !== null) {
                 const fila = Math.floor(posicaoValida / cadeirasPorFila) + 1;
                 const cadeira = (posicaoValida % cadeirasPorFila) + 1;
-                sala[posicaoValida] = { ...aluno, fila, cadeira };
+                sala[posicaoValida] = { ...aluno, fila, cadeira, salaProva };
                 alocado = true;
                 break;
             }
@@ -98,12 +100,13 @@ function distribuirAlunosEmSalas(salasSelecionadas) {
         if (!alocado) {
             for (let i = 0; i < quantidadeSalas; i++) {
                 const sala = salasDistribuidas[i];
+                const salaProva = `${salasSelecionadas[i][0].serie}${salasSelecionadas[i][0].turma}`;
                 const ultimaCadeira = sala.findIndex(cadeira => cadeira === null);
 
                 if (ultimaCadeira !== -1) {
                     const fila = Math.floor(ultimaCadeira / cadeirasPorFila) + 1;
                     const cadeira = (ultimaCadeira % cadeirasPorFila) + 1;
-                    sala[ultimaCadeira] = { ...aluno, fila, cadeira };
+                    sala[ultimaCadeira] = { ...aluno, fila, cadeira, salaProva };
                     break;
                 }
             }
@@ -113,4 +116,4 @@ function distribuirAlunosEmSalas(salasSelecionadas) {
     return salasDistribuidas;
 }
 
-module.exports = {distribuirAlunosEmSalas};
+module.exports = { distribuirAlunosEmSalas };

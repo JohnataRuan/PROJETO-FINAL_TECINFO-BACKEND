@@ -22,7 +22,7 @@ function gerarPDFAssinatura(alunosValidos, nomeSala) {
         const centerX = doc.page.margins.left + pageWidth / 2;
 
         // Logotipo e título
-        const logoPath = path.join(__dirname, 'logo lourdinas.jpg');
+        const logoPath = path.join(__dirname, '../assets/logo lourdinas.jpg');
         if (fs.existsSync(logoPath)) {
             doc.image(logoPath, doc.page.margins.left + 40, 20, { width: 60 });
         } else {
@@ -99,7 +99,7 @@ function gerarMapaDeSala(armazenaDados, nomeSala) {
         });
 
         // Logotipo e título alinhados horizontalmente
-        const logoPath = path.join(__dirname, 'logo lourdinas.jpg');
+        const logoPath = path.join(__dirname, '../assets/logo lourdinas.jpg');
         if (fs.existsSync(logoPath)) {
             doc.image(logoPath, doc.page.margins.left + 40, 20, { width: 60 }); // Alinhado à esquerda da página
         } else {
@@ -140,7 +140,7 @@ function gerarMapaDeSala(armazenaDados, nomeSala) {
         doc.end();
     });
 }
-// Função para gerar o PDF com stream
+
 async function gerarLocalizacaoAlunos(armazenaDados, nomeSala) {
     return new Promise((resolve, reject) => {
         // Cria um novo documento PDF
@@ -148,9 +148,9 @@ async function gerarLocalizacaoAlunos(armazenaDados, nomeSala) {
         const pdfStream = doc; // Usa o próprio objeto doc como o stream
 
         // Logotipo e título alinhados horizontalmente
-        const logoPath = path.join(__dirname, 'logo lourdinas.jpg');
+        const logoPath = path.join(__dirname, '../assets/logo lourdinas.jpg');
         if (fs.existsSync(logoPath)) {
-            doc.image(logoPath, doc.page.margins.left + 40, 20, { width: 60 }); // Alinhado à esquerda da página
+            doc.image(logoPath, doc.page.margins.left + 10, 20, { width: 60 }); // Alinhado à esquerda da página
         } else {
             console.warn('Logo "logo lourdinas.jpg" não encontrado em', logoPath);
         }
@@ -170,9 +170,10 @@ async function gerarLocalizacaoAlunos(armazenaDados, nomeSala) {
         const larguraColunaAluno = 250;
         const larguraColunaFila = 40;
         const larguraColunaCarteira = 50;
-        const larguraColunaSalaProva = 50;
+        const larguraColunaSalaProva = 90;
         const margemEsquerda = 30;
         const alturaLinha = 13; // Altura de linha
+        
 
         // Definindo as posições iniciais das colunas
         const colunaTurmaX = margemEsquerda;
@@ -182,12 +183,11 @@ async function gerarLocalizacaoAlunos(armazenaDados, nomeSala) {
         const colunaSalaProvaX = colunaCarteiraX + larguraColunaCarteira;
 
         // Cabeçalhos das colunas
-        doc.fontSize(12).text('Turma', colunaTurmaX, 110);
-        doc.fontSize(12).text('Aluno', colunaAlunoX, 110);
-        doc.fontSize(12).text('Fila', colunaFilaX, 110);
-        doc.fontSize(12).text('Carteira', colunaCarteiraX, 110);
-        doc.fontSize(12).text('Sala da Prova', colunaSalaProvaX + 45, 110);
-
+        doc.fontSize(12).text('Turma', colunaTurmaX, 105);
+        doc.fontSize(12).text('Aluno', colunaAlunoX, 105);
+        doc.fontSize(12).text('Fila', colunaFilaX, 105);
+        doc.fontSize(12).text('Carteira', colunaCarteiraX, 105);
+        doc.fontSize(12).text('Sala Prova', colunaSalaProvaX + 60, 95);
         doc.moveDown(); // Adiciona uma linha em branco
 
         // Adiciona os dados ao PDF
@@ -204,10 +204,10 @@ async function gerarLocalizacaoAlunos(armazenaDados, nomeSala) {
             doc.fontSize(10).text(dado.turma, colunaTurmaX + 14, yPos, { width: larguraColunaTurma });
             doc.font('Helvetica-Bold'); // deixar textos em negrito
             doc.fontSize(8).text(dado.nome, colunaAlunoX, yPos, { width: larguraColunaAluno });
-            doc.font('Helvetica'); // voltar para a fonte padrão
+            doc.font('Helvetica');// voltar para a cor padrão
             doc.fontSize(10).text(dado.fila, colunaFilaX + 8, yPos, { width: larguraColunaFila });
             doc.fontSize(10).text(dado.cadeira, colunaCarteiraX + 20, yPos, { width: larguraColunaCarteira });
-            doc.fontSize(10).text(dado.salaProva, colunaSalaProvaX + 72, yPos, { width: larguraColunaSalaProva });
+            doc.fontSize(10).text(dado.salaProva, colunaSalaProvaX+ 72, yPos, { width: larguraColunaSalaProva });
         });
 
         doc.end(); // Finaliza o PDF
