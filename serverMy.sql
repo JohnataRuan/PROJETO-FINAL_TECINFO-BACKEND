@@ -1,15 +1,15 @@
 						/*Configfurações Pré-estabelecidas do Banco de Dados*/
                         
 /*Criação do banco de dados*/
-CREATE DATABASE IF NOT exists teste;
+CREATE DATABASE IF NOT exists sorteioAssentos;
 /*Estabelecendo nome do usuário local e senha de acesso!*/
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '';
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'Johnata123!';
 /*Garantindo os privilégios de edições ao usuário*/
 GRANT ALL PRIVILEGES ON teste.* TO 'root'@'localhost';
 /*Atualizando privilégios*/
 FLUSH PRIVILEGES;
 /*Usando o banco de dados*/
-USE teste;
+USE sorteioAssentos;
 								/*Conteúdo do Banco de Dados*/
 CREATE TABLE  IF NOT exists alunos (
 id INT AUTO_INCREMENT UNIQUE,

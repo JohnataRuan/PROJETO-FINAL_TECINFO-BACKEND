@@ -2,6 +2,7 @@ const readline = require('readline');
 const { Readable } = require('stream');
 const fs = require('fs');
 const path = require('path');
+const {queryInsertAlunos,querySelectAlunosSerieTurma} = require ('../utils/queries');
 
 
 async function processCSV(buffer) {
@@ -38,10 +39,9 @@ async function processCSV(buffer) {
 function insertStudents(connection, students, ensino, serie, turma) {
     const insertPromises = students.map((aluno) => {
         return new Promise((resolve, reject) => {
-            const query = 'INSERT INTO alunos (matricula, nome, ensino, serie, turma) VALUES (?, ?, ?, ?, ?)';
             const values = [aluno.matricula, aluno.nome, ensino, serie, turma];
 
-            connection.query(query, values, (error) => {
+            connection.query(queryInsertAlunos, values, (error) => {
                 if (error) {
                     console.error('Erro ao inserir dados:', error);
                     reject(error);
@@ -58,10 +58,9 @@ function insertStudents(connection, students, ensino, serie, turma) {
 function getStudentsBySeriesAndClass(connection, salasSelecionadas) {
     return Promise.all(
         salasSelecionadas.map(sala => {
-            const query = 'SELECT * FROM alunos WHERE serie = ? AND turma = ?';
             const values = [sala.serie, sala.turma];
             return new Promise((resolve, reject) => {
-                connection.query(query, values, (error, results) => {
+                connection.query(querySelectAlunosSerieTurma, values, (error, results) => {
                     if (error) {
                         reject(error);
                     } else {
