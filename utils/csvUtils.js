@@ -8,20 +8,25 @@ async function makeArrayWithCSV(nomeArquivo) {
 
     const line = readline.createInterface({
         input: fs.createReadStream(nomeArquivo),
-        crlfDelay: Infinity
+        crlfDelay: Infinity,
     });
 
     return new Promise((resolve, reject) => {
         line.on("line", (data) => {
-            let csv = data.split(";");
+            // Detecta o delimitador correto
+            const delimiter = data.includes(";") ? ";" : ",";
+
+            // Divide os dados usando o delimitador detectado
+            let csv = data.split(delimiter);
+
             if (firstLine) {
-                firstLine = false;
+                firstLine = false; // Ignora a primeira linha (cabeçalho)
             } else {
                 let dados = {
                     matricula: csv[0].trim(),
                     nomeAluno: csv[1].trim(),
                     turmaAluno: csv[2].trim(),
-                    serieAluno: csv[3].trim()
+                    serieAluno: csv[3].trim(),
                 };
                 armazenaDados.push(dados);
             }
